@@ -11,12 +11,20 @@ const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerH
 camera.position.set(4, 3, 8);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limita a 2 para evitar travamentos em telas Retina/4K
 renderer.shadowMap.enabled = true; // ativa sombras para dar profundidade
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
+
+// --- Interatividade (Mouse Track) ---
+const mouse = { x: 0, y: 0 };
+window.addEventListener('mousemove', (event) => {
+    // Transforma as coordenadas do mouse em valores de -1 a 1
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+});
 
 // --- Luzes ---
 // Luz ambiente suave
@@ -27,7 +35,6 @@ scene.add(ambientLight);
 const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
 mainLight.position.set(5, 10, 4);
 mainLight.castShadow = true;
-mainLight.receiveShadow = true;
 mainLight.shadow.mapSize.width = 1024;
 mainLight.shadow.mapSize.height = 1024;
 scene.add(mainLight);
@@ -47,7 +54,7 @@ const centerLight = new THREE.PointLight(0xffaa88, 0.4);
 centerLight.position.set(0, 1, 0);
 scene.add(centerLight);
 
-// --- Objeto principal: Torus Knot com efeito metálico e rotação---
+// --- Objeto principal: Torus Knot com efeito metálico e rotação ---
 const knotGeometry = new THREE.TorusKnotGeometry(1.1, 0.28, 200, 32, 3, 4);
 const materialKnot = new THREE.MeshStandardMaterial({
     color: 0x3b82f6,
@@ -116,12 +123,11 @@ const starCount = 1800;
 const starGeo = new THREE.BufferGeometry();
 const starPositions = new Float32Array(starCount * 3);
 for (let i = 0; i < starCount; i++) {
-    // Distribuição esférica com raio entre 3.5 e 5.5
     const radius = 3.8 + Math.random() * 1.7;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     const x = radius * Math.sin(phi) * Math.cos(theta);
-    const y = radius * Math.sin(phi) * Math.sin(theta) * 0.7; // achatamento suave
+    const y = radius * Math.sin(phi) * Math.sin(theta) * 0.7;
     const z = radius * Math.cos(phi);
     starPositions[i*3] = x;
     starPositions[i*3+1] = y;
@@ -145,15 +151,20 @@ gridHelper.material.transparent = true;
 gridHelper.material.opacity = 0.25;
 scene.add(gridHelper);
 
-// Pequenos cubos flutuantes decorativos
+// Pequenos cubos flutuantes decorativos (Otimizados compartilhando Geometria e Material)
 const floatingGroup = new THREE.Group();
+const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
 const cubeMat = new THREE.MeshStandardMaterial({ color: 0xffaa55, emissive: 0x442200, emissiveIntensity: 0.2 });
+
 for (let i = 0; i < 24; i++) {
-    const size = 0.08 + Math.random() * 0.07;
-    const cube = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), cubeMat);
+    const scale = 0.08 + Math.random() * 0.07;
+    const cube = new THREE.Mesh(cubeGeometry, cubeMat);
+    cube.scale.set(scale, scale, scale); // Altera o tamanho individual via escala
+    
     const radiusC = 2.2 + Math.random() * 1.2;
     const angleC = Math.random() * Math.PI * 2;
     const yOff = (Math.random() - 0.5) * 1.8;
+    
     cube.position.x = Math.cos(angleC) * radiusC;
     cube.position.z = Math.sin(angleC) * radiusC;
     cube.position.y = yOff;
@@ -162,76 +173,6 @@ for (let i = 0; i < 24; i++) {
 }
 scene.add(floatingGroup);
 
-// Adicionar alguns raios de luz (efeito lens flare simplificado com pontos)
+// Adicionar alguns raios de luz
 const glowGeo = new THREE.BufferGeometry();
-const glowPositions = [];
-for (let i = 0; i < 300; i++) {
-    const rad = 4.5;
-    const angleGlow = Math.random() * Math.PI * 2;
-    const yGlow = (Math.random() - 0.5) * 3;
-    const xGlow = Math.cos(angleGlow) * rad;
-    const zGlow = Math.sin(angleGlow) * rad;
-    glowPositions.push(xGlow, yGlow, zGlow);
-}
-glowGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(glowPositions), 3));
-const glowPointsMat = new THREE.PointsMaterial({ color: 0xffaa88, size: 0.02, transparent: true, blending: THREE.AdditiveBlending });
-const glowPoints = new THREE.Points(glowGeo, glowPointsMat);
-scene.add(glowPoints);
-
-// --- Animação de cores e rotação ---
-let time = 0;
-
-// Função de animação
-function animate() {
-    requestAnimationFrame(animate);
-    time += 0.012;
-    
-    // Rotação do objeto principal - elegante e contínua
-    torusKnot.rotation.x = Math.sin(time * 0.2) * 0.3;
-    torusKnot.rotation.y = time * 0.45;
-    torusKnot.rotation.z = Math.cos(time * 0.3) * 0.2;
-    
-    // Anéis de partículas giram em sentido contrário
-    ringPoints.rotation.y = time * 0.2;
-    ringPoints.rotation.x = Math.sin(time * 0.15) * 0.1;
-    outerPoints.rotation.y = -time * 0.18;
-    outerPoints.rotation.z = Math.sin(time * 0.2) * 0.05;
-    
-    // Estrelas e partículas giram lentamente
-    starField.rotation.y = time * 0.03;
-    starField.rotation.x = Math.sin(time * 0.07) * 0.1;
-    floatingGroup.rotation.y = time * 0.1;
-    glowPoints.rotation.y = time * 0.05;
-    
-    // Luz central pisca suavemente
-    const intensity = 0.4 + Math.sin(time * 1.8) * 0.15;
-    centerLight.intensity = intensity;
-    
-    // Movimento da câmera muito sutil (efeito orbit)
-    const cameraRadius = 7.2;
-    const targetX = Math.sin(time * 0.05) * 0.5;
-    const targetY = 2.5 + Math.sin(time * 0.2) * 0.1;
-    camera.position.x += (targetX - camera.position.x) * 0.02;
-    camera.position.y += (targetY - camera.position.y) * 0.02;
-    camera.lookAt(0, 0.2, 0);
-    
-    // Mudança sutil de cor do nó (efeito metálico)
-    const hue = 0.55 + Math.sin(time * 0.2) * 0.05; // tom azul/roxo
-    materialKnot.color.setHSL(hue, 0.9, 0.55);
-    materialKnot.emissiveIntensity = 0.35 + Math.sin(time * 1.2) * 0.1;
-    
-    renderer.render(scene, camera);
-}
-
-animate();
-
-// --- Responsividade: ajustar câmera e renderer ao redimensionar ---
-window.addEventListener('resize', onWindowResize, false);
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// Log de inicialização
-console.log('Site 3D EEEFM Estudo e Trabalho carregado com sucesso!');
+const
